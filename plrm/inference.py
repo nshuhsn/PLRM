@@ -5,7 +5,7 @@ import torch
 
 from plrm.backbone import build_lora_config
 from plrm.config import ModelArguments, TrainingArguments
-from plrm.data import normalize_question
+from plrm.data import format_question
 from plrm.model import PLRM, positions_from_mask
 
 
@@ -59,6 +59,7 @@ def load_model(checkpoint, base_model=None, model_revision=None, device=None):
     else:
         state = torch.load(os.path.join(checkpoint, "pytorch_model.bin"), map_location="cpu")
     model.load_state_dict(state, strict=True)
+    model.data_name = config.get("data_name")
     return model.to(device).eval()
 
 
@@ -192,7 +193,7 @@ def _left_pad(rows, value):
 
 
 @torch.no_grad()
-def iter_predictions(model, rows, batch_size, decode_mode="mode", teacher=False, max_new_tokens=None):
+def iter_predictions(model, rows, batch_size, task, decode_mode="mode", teacher=False, max_new_tokens=None):
     max_new_tokens = max_new_tokens or model.training_args.max_new_tokens
     device = next(model.parameters()).device
     tokenizer = model.tokenizer
@@ -202,7 +203,7 @@ def iter_predictions(model, rows, batch_size, decode_mode="mode", teacher=False,
         for start in range(0, len(rows), batch_size):
             batch = rows[start:start + batch_size]
             question_ids = [
-                tokenizer(normalize_question(row["question"]), add_special_tokens=False)["input_ids"]
+                tokenizer(format_question(row["question"], task), add_special_tokens=False)["input_ids"]
                 for row in batch
             ]
             input_ids = _left_pad([ids + [model.bot_id] for ids in question_ids], model.pad_token_id).to(device)
@@ -226,6 +227,7 @@ def iter_predictions(model, rows, batch_size, decode_mode="mode", teacher=False,
                     "example_id": row["example_id"],
                     "prediction": tokenizer.decode(token_ids, skip_special_tokens=True).strip(),
                     "generated_token_count": len(token_ids),
+                    "latent_step_count": model.num_latent,
                     "finish_reason": "length" if len(token_ids) == max_new_tokens else "eos",
                 }
     finally:

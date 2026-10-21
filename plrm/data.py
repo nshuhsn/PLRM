@@ -8,10 +8,28 @@ from plrm.model import IGNORE_INDEX
 
 
 ANSWER_TEMPLATE = "The answer is: {}"
+HIDDEN_BRANCH_TEMPLATE = "Answer: {}"
 
 
 def normalize_question(text):
     return " ".join(str(text).split())
+
+
+def format_question(text, task):
+    # HiddenBranch inputs keep their line structure (Facts / Rules / Question blocks).
+    if task == "hidden_branch":
+        return str(text)
+    return normalize_question(text)
+
+
+def format_answer(answer, task):
+    if task == "hidden_branch":
+        return HIDDEN_BRANCH_TEMPLATE.format(json.dumps([str(answer).strip()]))
+    return ANSWER_TEMPLATE.format(str(answer).strip())
+
+
+def gold_answers(row):
+    return row["answers"] if "answers" in row else [row["answer"]]
 
 
 def read_jsonl(path):
@@ -37,16 +55,16 @@ def build_example(question_ids, cot_ids, answer_ids, model, eos_token_id):
 
 
 class ReasoningDataset(Dataset):
-    def __init__(self, path, tokenizer, model, max_tokens):
+    def __init__(self, path, tokenizer, model, max_tokens, task):
         self.rows = []
         self.n_source = 0
         self.n_over_length = 0
         eos = tokenizer.eos_token_id
         for example in read_jsonl(path):
             self.n_source += 1
-            question = normalize_question(example["question"])
+            question = format_question(example["question"], task)
             cot = str(example.get("cot", "")).strip()
-            answer = ANSWER_TEMPLATE.format(str(example["answer"]).strip())
+            answer = format_answer(example["answer"], task)
             qids = tokenizer(question, add_special_tokens=False)["input_ids"]
             cids = tokenizer(cot, add_special_tokens=False)["input_ids"] if cot else []
             aids = tokenizer(answer, add_special_tokens=False)["input_ids"] + [eos]

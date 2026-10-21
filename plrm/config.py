@@ -5,7 +5,7 @@ import transformers
 
 
 DEFAULT_BASE_MODEL = "meta-llama/Llama-3.2-1B-Instruct"
-TASKS = ("gsm8k", "gsm8k_nl", "commonsenseqa")
+TASKS = ("gsm8k", "gsm8k_nl", "commonsenseqa", "hidden_branch")
 
 
 @dataclass

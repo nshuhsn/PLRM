@@ -6,7 +6,7 @@ from pathlib import Path
 import torch
 from transformers import Trainer, TrainerCallback
 
-from plrm.data import read_jsonl
+from plrm.data import gold_answers, read_jsonl
 from plrm.distributed import world_size
 from plrm.inference import CONFIG_NAME, checkpoint_config, iter_predictions
 from plrm.metrics import is_correct
@@ -89,6 +89,8 @@ class EpochAccuracyCallback(TrainerCallback):
         if len({row["example_id"] for row in self.rows}) != len(self.rows):
             raise ValueError(f"{path} example_id values must be unique")
         self.task = task
+        # Teacher (posterior) accuracy needs a gold CoT; grouped multi-answer rows have none.
+        self.has_cot = all(str(row.get("cot", "")).strip() for row in self.rows)
         self.batch_size = batch_size
         self.split = split
         self.save_best = save_best
@@ -96,12 +98,12 @@ class EpochAccuracyCallback(TrainerCallback):
         self.best_epoch = None
 
     def _count(self, model, rows, teacher):
-        answers = {row["example_id"]: row["answer"] for row in rows}
+        answers = {row["example_id"]: gold_answers(row) for row in rows}
         device = next(model.parameters()).device
         correct = total = limited = 0
         cuda_devices = [device.index] if device.type == "cuda" else []
         with torch.random.fork_rng(devices=cuda_devices), self.trainer.accelerator.autocast():
-            for prediction in iter_predictions(model, rows, self.batch_size, teacher=teacher):
+            for prediction in iter_predictions(model, rows, self.batch_size, self.task, teacher=teacher):
                 correct += int(is_correct(prediction["prediction"], answers[prediction["example_id"]], self.task))
                 total += 1
                 limited += prediction["finish_reason"] == "length"
@@ -116,14 +118,14 @@ class EpochAccuracyCallback(TrainerCallback):
         rank = torch.distributed.get_rank() if world_size() > 1 else 0
         rows = self.rows[rank::world_size()]
         correct, total, limited = self._count(model, rows, teacher=False)
-        teacher_correct, _, _ = self._count(model, rows, teacher=True)
+        teacher_correct = self._count(model, rows, teacher=True)[0] if self.has_cot else None
         metrics = {
             "epoch": state.epoch,
             "global_step": state.global_step,
             "n_correct": correct,
             "n_total": total,
             "accuracy": correct / total,
-            "teacher_accuracy": teacher_correct / total,
+            "teacher_accuracy": None if teacher_correct is None else teacher_correct / total,
             "length_limit_rate": limited / total,
         }
         output_dir = Path(args.output_dir)
@@ -140,13 +142,15 @@ class EpochAccuracyCallback(TrainerCallback):
         if trainer.is_world_process_zero():
             with (output_dir / f"epoch_{self.split}_metrics.jsonl").open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(metrics) + "\n")
+            teacher = metrics["teacher_accuracy"]
+            teacher_text = "" if teacher is None else f" teacher_accuracy={100 * teacher:.2f}%"
             print(
-                f"[{self.split}] epoch={state.epoch:.2f} accuracy={100 * metrics['accuracy']:.2f}% "
-                f"teacher_accuracy={100 * metrics['teacher_accuracy']:.2f}% ({correct}/{total})",
+                f"[{self.split}] epoch={state.epoch:.2f} accuracy={100 * metrics['accuracy']:.2f}%"
+                f"{teacher_text} ({correct}/{total})",
                 flush=True,
             )
-        trainer.log({
-            f"{self.split}_accuracy": metrics["accuracy"],
-            f"{self.split}_teacher_accuracy": metrics["teacher_accuracy"],
-        })
+        logs = {f"{self.split}_accuracy": metrics["accuracy"]}
+        if metrics["teacher_accuracy"] is not None:
+            logs[f"{self.split}_teacher_accuracy"] = metrics["teacher_accuracy"]
+        trainer.log(logs)
         return control

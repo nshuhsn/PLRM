@@ -2,7 +2,7 @@ import transformers
 
 from plrm.backbone import build_lora_config
 from plrm.config import TASKS, DataArguments, ModelArguments, TrainingArguments
-from plrm.data import Collator, ReasoningDataset
+from plrm.data import Collator, ReasoningDataset, read_jsonl
 from plrm.model import PLRM
 from plrm.trainer import EpochAccuracyCallback, PLRMTrainer
 
@@ -24,12 +24,14 @@ def main():
     tokenizer.model_max_length = training_args.model_max_length
 
     train_dataset = ReasoningDataset(
-        data_args.train_file, tokenizer, model, training_args.max_token_num
+        data_args.train_file, tokenizer, model, training_args.max_token_num, data_args.data_name
     )
     eval_dataset = None
-    if data_args.validation_file:
+    # Grouped multi-answer validation rows ("answers") only drive accuracy-based selection.
+    if data_args.validation_file and all("answer" in row for row in read_jsonl(data_args.validation_file)):
         eval_dataset = ReasoningDataset(
-            data_args.validation_file, tokenizer, model, training_args.max_token_num
+            data_args.validation_file, tokenizer, model, training_args.max_token_num,
+            data_args.data_name,
         )
     trainer = PLRMTrainer(
         model=model,
