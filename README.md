@@ -1,6 +1,6 @@
 # PLRM: Parallelizable Probabilistic Latent Reasoning for Diverse Reasoning Trajectories
 
-Official implementation of **PLRM**, released anonymously for double-blind review.
+Official implementation of **PLRM**
 
 PLRM replaces explicit chain-of-thought (CoT) tokens with a short sequence of continuous latent thoughts and treats them as random variables. During training, a posterior over all latent steps is computed in a single parallel forward pass over the gold CoT. At inference, the model rolls out a learned prior without any CoT: taking the prior mean gives a deterministic trajectory, and sampling from it gives diverse reasoning trajectories for the same question.
 
