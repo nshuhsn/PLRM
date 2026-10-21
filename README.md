@@ -53,14 +53,3 @@ bash scripts/evaluate_gsm8k_nl.sh
 ```
 
 Predictions are written to `CHECKPOINT/predictions_test.jsonl`. Use `--decode-mode mode` (default) for deterministic decoding, or `--decode-mode sample` with different `--seed` values to obtain diverse reasoning trajectories.
-
-## Citation
-
-```bibtex
-@inproceedings{anonymous2027plrm,
-  title     = {Parallelizable Probabilistic Latent Reasoning for Diverse Reasoning Trajectories},
-  author    = {Anonymous},
-  booktitle = {Under review},
-  year      = {2027}
-}
-```
