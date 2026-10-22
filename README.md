@@ -58,7 +58,19 @@ B: ...
 
 `python scripts/prepare_gsm8k_nl.py --output-dir data/gsm8k_nl` builds `data/gsm8k_nl/` from the public sources.
 
-**HiddenBranch.** HiddenBranch is built from the open-world abductive setting of ProofWriter. Each input has two to five valid hidden facts, and each hidden fact has its own proof.
+**HiddenBranch.** HiddenBranch is built from the open-world abductive setting of ProofWriter. Each input has two to five valid hidden facts, and each hidden fact has its own proof. The dataset is included in this repository:
+
+```bash
+unzip data/hidden_branch.zip -d data
+```
+
+| Split | Unique inputs | Valid branches |
+| --- | ---: | ---: |
+| Train | 21,466 | 52,734 |
+| Validation | 3,179 | 7,712 |
+| Test | 6,128 | 15,101 |
+
+The files use the following format:
 
 - `train.jsonl` has one line per branch (hidden fact), so inputs repeat:
 

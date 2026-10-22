@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
-data/
+data/*
+!data/hidden_branch.zip
 outputs/
 *.log
