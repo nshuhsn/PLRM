@@ -23,8 +23,18 @@ case "$BACKBONE:$TASK" in
   llama:commonsenseqa) LR=3e-4; EPOCHS=10; BATCH=256; PTL=24; MAX_TOKENS=1000 ;;
   *) echo "unsupported setting: $BACKBONE $TASK" >&2; exit 2 ;;
 esac
-PER_DEVICE_BATCH=${PER_DEVICE_BATCH:-$((BATCH / NPROC))}
+# Batch statistics (VISReg, mode balance) are computed per micro-batch, so keep the
+# micro-batch of the reported runs: 64 per GPU on 4 GPUs for Llama, 32 with 4 accumulation steps for HiddenBranch.
+if [[ "$TASK" == "hidden_branch" ]]; then
+  PER_DEVICE_BATCH=${PER_DEVICE_BATCH:-$((32 / NPROC))}
+else
+  PER_DEVICE_BATCH=${PER_DEVICE_BATCH:-$((BATCH / NPROC))}
+fi
 GRAD_ACCUM=$((BATCH / (PER_DEVICE_BATCH * NPROC)))
+if (( PER_DEVICE_BATCH < 1 || PER_DEVICE_BATCH * NPROC * GRAD_ACCUM != BATCH )); then
+  echo "effective batch $BATCH is not PER_DEVICE_BATCH ($PER_DEVICE_BATCH) x NPROC ($NPROC) x accumulation" >&2
+  exit 2
+fi
 
 if [[ "$TASK" == "hidden_branch" ]]; then
   # Mixture prior with M strategy components (Table 5: M = 1, 2, 3, 4).
